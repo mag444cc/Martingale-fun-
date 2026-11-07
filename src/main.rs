@@ -64,6 +64,10 @@ enum Command {
         /// Maintenance margin %: SOL 2.5, ETH 2, BTC 1.25.
         #[arg(long, default_value = "2.5")]
         maintenance_pct: Decimal,
+        /// Only trade from this time (UTC), e.g. 2026-11-07T09:22. Earlier
+        /// prices only warm up the EMA and the trend filter.
+        #[arg(long)]
+        trade_from: Option<String>,
     },
 }
 
@@ -96,7 +100,16 @@ async fn main() -> Result<()> {
             size_step,
             funding_apr_pct,
             maintenance_pct,
+            trade_from,
         } => {
+            let trade_from_ms = match trade_from {
+                Some(text) => Some(backtest::parse_time(&text).ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "--trade-from: use a UTC time like 2026-11-07T09:22, got {text:?}"
+                    )
+                })?),
+                None => None,
+            };
             let config = config::Config::load(&config)?;
             let bars = backtest::load_bars(&data)?;
             let options = backtest::Options {
@@ -104,6 +117,7 @@ async fn main() -> Result<()> {
                 size_step,
                 funding_apr_pct,
                 maintenance_pct,
+                trade_from_ms,
             };
             backtest::print(&backtest::run(&config, &bars, &options));
             Ok(())

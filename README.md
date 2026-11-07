@@ -85,6 +85,7 @@ been liquidated**. Options:
 | `--size-step` | 0.01 | The coin's size step: SOL 0.01, ETH 0.0001, BTC 0.00001. |
 | `--maintenance-pct` | 2.5 | When liquidation happens: SOL 2.5, ETH 2, BTC 1.25. |
 | `--funding-apr-pct` | 11 | Funding longs pay, % a year (an estimate). |
+| `--trade-from` | (start) | Only trade from this UTC time, e.g. `2026-11-07T09:22`. Earlier prices just warm up the EMA and trend filter. Handy to replay a day: "what would the bot have done since this morning?" |
 
 Fills are counted strictly: a resting order fills only once the price
 trades *through* it (a real order queues behind others at its price, so a

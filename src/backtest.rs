@@ -52,6 +52,9 @@ pub struct Options {
     pub funding_apr_pct: Decimal,
     /// Maintenance margin, % of the position's value (SOL 2.5, ETH 2, BTC 1.25).
     pub maintenance_pct: Decimal,
+    /// Only trade from this moment (ms since 1970). Earlier minutes just warm
+    /// up the EMA and the trend filter. `None`: trade from the first minute.
+    pub trade_from_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -178,8 +181,7 @@ pub fn run(config: &Config, bars: &[Bar], options: &Options) -> Report {
     };
     let account = options.account_usd.unwrap_or(config.max_position_usd);
     report.account_usd = account;
-    report.first_day = day_string(first.time_ms);
-    report.last_day = day_string(last.time_ms);
+    report.last_day = time_string(last.time_ms);
 
     let start = Instant::now();
     let intents = sim.bot.start();
@@ -222,6 +224,14 @@ pub fn run(config: &Config, bars: &[Bar], options: &Options) -> Report {
                 daily: daily.clone(),
             };
             sim.step(closes, now);
+        }
+        // Warming up: candles yes, trading no (no prices for the strategy).
+        if options.trade_from_ms.is_some_and(|from| bar.time_ms < from) {
+            last_close = bar.close;
+            continue;
+        }
+        if report.first_day.is_empty() {
+            report.first_day = time_string(bar.time_ms);
         }
         let equity_now = account + sim.bot.pnl(last_close) - funding;
         let this_year = civil_from_days(this_day).0;
@@ -350,6 +360,53 @@ pub fn print(report: &Report) {
     }
 }
 
+/// "2026-11-07 09:22" (UTC).
+fn time_string(time_ms: i64) -> String {
+    let minutes = time_ms.div_euclid(60_000).rem_euclid(24 * 60);
+    format!(
+        "{} {:02}:{:02}",
+        day_string(time_ms),
+        minutes / 60,
+        minutes % 60
+    )
+}
+
+/// "2026-11-07T09:22" or "2026-11-07" (UTC) to ms since 1970.
+pub fn parse_time(text: &str) -> Option<i64> {
+    let (date, time) = match text.split_once(['T', ' ']) {
+        Some((date, time)) => (date, Some(time)),
+        None => (text, None),
+    };
+    let mut parts = date.split('-').map(|p| p.parse::<i64>().ok());
+    let (y, m, d) = (parts.next()??, parts.next()??, parts.next()??);
+    if parts.next().is_some() || !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return None;
+    }
+    let minutes = match time {
+        None => 0,
+        Some(time) => {
+            let (h, min) = time.split_once(':')?;
+            let (h, min): (i64, i64) = (h.parse().ok()?, min.get(..2)?.parse().ok()?);
+            if h > 23 || min > 59 {
+                return None;
+            }
+            h * 60 + min
+        }
+    };
+    Some((days_from_civil(y, m, d) * 24 * 60 + minutes) * 60_000)
+}
+
+/// (year, month, day) to days since 1970-01-01 (the reverse of `civil_from_days`).
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (m + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
 fn day_string(time_ms: i64) -> String {
     let (y, m, d) = civil_from_days(time_ms.div_euclid(86_400_000));
     format!("{y:04}-{m:02}-{d:02}")
@@ -394,6 +451,7 @@ mod tests {
             size_step: d("0.01"),
             funding_apr_pct: Decimal::ZERO,
             maintenance_pct: d("2.5"),
+            trade_from_ms: None,
         }
     }
 
@@ -461,6 +519,38 @@ mod tests {
         assert_eq!((report.cycles, report.wins), (1, 1), "{report:?}");
         assert!(report.end_equity > d("1000"));
         assert!(report.liquidated.is_none());
+    }
+
+    #[test]
+    fn nothing_trades_before_trade_from() {
+        // Warm-up day, then a dip and a bounce. Trading starts after the dip:
+        // the dip only warmed up the EMA, so no cycle.
+        let bars = bars(&[("99", 60), ("100", 60)]);
+        let dip_starts = 24 * 60 * 60_000;
+        let mut options = options();
+        options.trade_from_ms = Some(dip_starts + 60 * 60_000);
+        let report = run(&config(), &bars, &options);
+        assert_eq!(report.cycles, 0, "{report:?}");
+        assert_eq!(report.end_equity, d("1000"));
+        assert_eq!(
+            report.first_day, "1970-01-02 01:00",
+            "the report starts when trading does"
+        );
+
+        // Trading from a minute before the dip: the EMA is already warm, so the
+        // entry goes up at once and the dip fills it.
+        options.trade_from_ms = Some(dip_starts - 60_000);
+        let report = run(&config(), &bars, &options);
+        assert_eq!((report.cycles, report.wins), (1, 1), "{report:?}");
+    }
+
+    #[test]
+    fn reads_a_start_time() {
+        assert_eq!(parse_time("1970-01-01"), Some(0));
+        assert_eq!(parse_time("2026-11-07T09:22"), Some(1_794_043_320_000));
+        assert_eq!(parse_time("2026-11-07 09:22"), Some(1_794_043_320_000));
+        assert_eq!(parse_time("07/11/2026"), None);
+        assert_eq!(parse_time("2026-13-01"), None);
     }
 
     #[test]
