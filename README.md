@@ -89,6 +89,28 @@ Treat results as a best case: a resting order counts as filled when the
 price touches it, and within a minute the backtest has to guess the order of
 the high and the low.
 
+What it says for SOL, Oct 2020 to Oct 2026, $400 account (about 1x), fixed sizes (profits not reinvested):
+
+| | `bot.toml` (vault rules) | `configs/sol-safer.toml` (stop −20% + trend) |
+|---|---|---|
+| End | $1,286 (+221%) | $757 (+89%) |
+| Worst drawdown | −31% | −17% |
+| Cycles, win rate | 5,810, 100% | 5,728, 99.79% |
+| Stops | 0 | 12 |
+| Longest cycle | **808 days** (Dec 2021 to Mar 2024) | 12 days |
+| Funding paid (estimate) | $58 | $7 |
+| 2022 / 2025 / 2026 | −29% / +9% / −8% | +8% / −7% / −3% |
+
+The "100%" counts each cycle by its sale price. The 808-day cycle sold above
+its entry, so it counts as a win, but the funding paid while waiting made it
+a loss. A win rate hides that.
+
+When you start matters most. `max_loss_usd` counts the whole run, so profits
+made early act as a cushion. Started at the Nov 2021 top instead, the vault
+rules lost their $60 limit by 20 Jan 2022 and stopped: −16% on a $400
+account, −59% on a $108 one (about 3x). Without that limit they would have
+held on while SOL fell 97%.
+
 ## Can you hedge the liquidation and keep the high win rate?
 
 Partly. From the research (one-month runs started on 330 dates, 2020–2026):
