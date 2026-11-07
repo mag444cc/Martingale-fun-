@@ -1,0 +1,26 @@
+# The bot's settings. Read the README before changing them.
+# Numbers are strings ("0.8") so they are exact (no floating point).
+
+network = "mainnet"
+
+# true: watch real prices and pretend to trade. No key, no money.
+# To trade for real, don't edit this: run `cargo run -- --live` (README: Going live).
+dry_run = true
+key_file = "hyperliquid.key"
+
+coin = "SOL"
+
+# --- The rules (the vault's, from the research) ---
+ema_hours = 14                    # EMA of the last 14 hourly closes
+entry_below_ema_pct = "0.8"       # first buy 0.8% under it
+add_levels_pct = ["2.25", "3.5", "5", "7", "9.8"]   # adds at these drops from the first buy
+add_multiplier = "2"              # each add doubles the position: 1, 2, 4, 8, 16, 32
+max_adds = 5                      # the cap on adds (at most 10)
+take_profit_pct = "0.65"          # sell everything 0.65% over the average entry
+# stop_pct = "20"                 # sell everything 20% under the first buy (off: no stop)
+# trend_filter_days = 50          # no new cycle while the daily trend is down (off)
+first_order_usd = "11"            # Hyperliquid's minimum order is $10
+
+# --- Safety: always on ---
+max_position_usd = "400"          # never hold more (a full ladder here is about $325)
+max_loss_usd = "60"               # lose this much in one run: sell everything and stop

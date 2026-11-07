@@ -1,0 +1,20 @@
+# SOL with a stop and the trend filter: the steadiest version in the research
+# (fewer, smaller wins; no wipe-outs in 2020-2026 at 1x).
+
+network = "mainnet"
+dry_run = true
+key_file = "hyperliquid.key"
+coin = "SOL"
+
+ema_hours = 14
+entry_below_ema_pct = "0.8"
+add_levels_pct = ["2.25", "3.5", "5", "7", "9.8"]
+add_multiplier = "2"
+max_adds = 5
+take_profit_pct = "0.65"
+stop_pct = "20"
+trend_filter_days = 50
+first_order_usd = "11"
+
+max_position_usd = "400"
+max_loss_usd = "60"

@@ -1,0 +1,17 @@
+# BTC with the vault's rules. Backtest with --size-step 0.00001 --maintenance-pct 1.25.
+
+network = "mainnet"
+dry_run = true
+key_file = "hyperliquid.key"
+coin = "BTC"
+
+ema_hours = 14
+entry_below_ema_pct = "0.8"
+add_levels_pct = ["2.25", "3.5", "5", "7", "9.8"]
+add_multiplier = "2"
+max_adds = 5
+take_profit_pct = "0.65"
+first_order_usd = "11"
+
+max_position_usd = "400"
+max_loss_usd = "60"
