@@ -293,19 +293,24 @@ impl Executor for PaperExecutor {
         }
     }
 
-    /// Fill any order the price has traded through, at the order's own price.
-    /// Optimistic: a real order waits in a queue behind others at its price
-    /// and might not fill when the price only just touches it.
+    /// Fill any order the price has traded *through*, at the order's own price.
+    ///
+    /// A real resting order waits in a queue behind everyone already at its
+    /// price, so a touch proves nothing. Once the best bid falls under our
+    /// buy (or the best ask rises over our sell), that whole price level has
+    /// been used up, our order included. This misses some fills a real order
+    /// would get, so paper results lean a little pessimistic, not optimistic.
     fn on_event(&mut self, event: &Event) {
         let Event::Top { bid, ask } = event else {
             return;
         };
         self.top = Some((*bid, *ask));
-        let crossed = |o: &Order| match o.side {
-            Side::Buy => *ask <= o.price,
-            Side::Sell => *bid >= o.price,
+        let traded_through = |o: &Order| match o.side {
+            Side::Buy => *bid < o.price,
+            Side::Sell => *ask > o.price,
         };
-        let (filled, resting): (Vec<Order>, Vec<Order>) = self.resting.drain(..).partition(crossed);
+        let (filled, resting): (Vec<Order>, Vec<Order>) =
+            self.resting.drain(..).partition(traded_through);
         self.resting = resting;
         for order in filled {
             self.fill(&order, order.price, self.maker_fee_bps);
@@ -364,6 +369,32 @@ mod tests {
         assert_eq!(fill.fee, d("0.01485"), "maker fee: 1.5 bps of $99");
         paper.on_event(&top("98", "98.1"));
         assert!(events.try_recv().is_err(), "a filled order is gone");
+    }
+
+    #[tokio::test]
+    async fn a_touch_is_not_a_fill_only_trading_through_is() {
+        // We queue behind everyone already at our price. Only once the price
+        // trades past it have all of them, and we, been filled.
+        let (mut paper, mut events) = paper();
+        paper.on_event(&top("100", "100.1"));
+        paper.execute(vec![
+            Intent::Place(order(1, Side::Buy, "99", OrderKind::Maker)),
+            Intent::Place(order(2, Side::Sell, "101", OrderKind::Maker)),
+        ]);
+        paper.on_event(&top("99", "99"));
+        paper.on_event(&top("101", "101"));
+        assert!(events.try_recv().is_err(), "touched, not filled");
+
+        paper.on_event(&top("98.99", "99"));
+        let Ok(Event::Fill(buy)) = events.try_recv() else {
+            panic!("the bid went under 99: our buy filled")
+        };
+        assert_eq!((buy.client_id, buy.price), (Some(1), d("99")));
+        paper.on_event(&top("101", "101.01"));
+        let Ok(Event::Fill(sell)) = events.try_recv() else {
+            panic!("the ask went over 101: our sell filled")
+        };
+        assert_eq!((sell.client_id, sell.price), (Some(2), d("101")));
     }
 
     #[tokio::test]

@@ -57,7 +57,8 @@ cargo run -- run configs/sol-safer.toml  # with a stop and the trend filter
 What the log means:
 
 - `no SOL position on the account: ready`: it has checked, and will start.
-- `paper: place side=Buy price=…`: the order it would place.
+- `paper: place side=Buy price=…`: the order it would place. A paper order
+  fills once the live price trades through it, as a real one would.
 - `filled`, `cycle started`, `add 1 of 5 filled`, `cycle won pnl_usd=…`: a cycle as it happens.
 - The first buy needs the EMA, so it waits for the first candles (up to a minute).
 
@@ -85,17 +86,19 @@ been liquidated**. Options:
 | `--maintenance-pct` | 2.5 | When liquidation happens: SOL 2.5, ETH 2, BTC 1.25. |
 | `--funding-apr-pct` | 11 | Funding longs pay, % a year (an estimate). |
 
-Treat results as a best case: a resting order counts as filled when the
-price touches it, and within a minute the backtest has to guess the order of
-the high and the low.
+Fills are counted strictly: a resting order fills only once the price
+trades *through* it (a real order queues behind others at its price, so a
+touch proves nothing). Still treat results as rough: within a minute the
+backtest has to guess the order of the high and the low, and big orders
+would move a real market.
 
 What it says for SOL, Oct 2020 to Oct 2026, $400 account (about 1x), fixed sizes (profits not reinvested):
 
 | | `bot.toml` (vault rules) | `configs/sol-safer.toml` (stop −20% + trend) |
 |---|---|---|
-| End | $1,286 (+221%) | $757 (+89%) |
+| End | $1,283 (+221%) | $753 (+88%) |
 | Worst drawdown | −31% | −17% |
-| Cycles, win rate | 5,810, 100% | 5,728, 99.79% |
+| Cycles, win rate | 5,774, 100% | 5,682, 99.79% |
 | Stops | 0 | 12 |
 | Longest cycle | **808 days** (Dec 2021 to Mar 2024) | 12 days |
 | Funding paid (estimate) | $58 | $7 |
@@ -108,7 +111,7 @@ a loss. A win rate hides that.
 When you start matters most. `max_loss_usd` counts the whole run, so profits
 made early act as a cushion. Started at the Nov 2021 top instead, the vault
 rules lost their $60 limit by 20 Jan 2022 and stopped: −16% on a $400
-account, −59% on a $108 one (about 3x). Without that limit they would have
+account, −58% on a $108 one (about 3x). Without that limit they would have
 held on while SOL fell 97%.
 
 ## Can you hedge the liquidation and keep the high win rate?

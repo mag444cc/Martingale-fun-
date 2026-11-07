@@ -403,6 +403,17 @@ mod tests {
         bars_from(&owned)
     }
 
+    /// One minute at each price from `from` down to `to`, 0.5 apart.
+    fn falling(from: &str, to: &str) -> Vec<(Decimal, usize)> {
+        let (mut price, to) = (d(from), d(to));
+        let mut legs = Vec::new();
+        while price >= to {
+            legs.push((price, 1));
+            price -= d("0.5");
+        }
+        legs
+    }
+
     fn bars_from(legs: &[(Decimal, usize)]) -> Vec<Bar> {
         let mut prices = vec![d("100"); 24 * 60];
         for (price, minutes) in legs {
@@ -460,11 +471,8 @@ mod tests {
         let mut config = config();
         config.first_order_usd = d("30");
         config.max_loss_usd = d("10000"); // no safety net
-        let report = run(
-            &config,
-            &bars(&[("95", 60), ("90", 60), ("40", 60)]),
-            &options,
-        );
+        // Half a percent a minute, all the way down: every add fills on the way.
+        let report = run(&config, &bars_from(&falling("100", "40")), &options);
         assert!(report.liquidated.is_some(), "{report:?}");
         assert_eq!(report.end_equity, Decimal::ZERO);
     }
@@ -477,9 +485,7 @@ mod tests {
         config.first_order_usd = d("30");
         config.max_loss_usd = d("100");
         // A crash that takes hours, half a percent a minute, then a recovery.
-        let mut legs: Vec<(Decimal, usize)> = (0..=120)
-            .map(|i| (d("100") - Decimal::from(i) * d("0.5"), 1))
-            .collect();
+        let mut legs = falling("100", "40");
         legs.push((d("100"), 60));
         let report = run(&config, &bars_from(&legs), &options);
         assert!(report.liquidated.is_none(), "{report:?}");
@@ -499,11 +505,10 @@ mod tests {
         let mut config = config();
         config.first_order_usd = d("30");
         config.max_loss_usd = d("100");
-        let report = run(
-            &config,
-            &bars(&[("95", 60), ("90", 60), ("40", 60)]),
-            &options,
-        );
+        // Down to 89 slowly (every add fills), then 89 to 40 in one minute.
+        let mut legs = falling("100", "89");
+        legs.extend([(d("40"), 1), (d("39.9"), 1)]);
+        let report = run(&config, &bars_from(&legs), &options);
         assert!(report.end_equity < d("100"), "{report:?}");
     }
 
