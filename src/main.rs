@@ -68,6 +68,9 @@ enum Command {
         /// prices only warm up the EMA and the trend filter.
         #[arg(long)]
         trade_from: Option<String>,
+        /// Also write how each day ended (price, account, position) to this CSV file.
+        #[arg(long)]
+        daily_csv: Option<PathBuf>,
     },
 }
 
@@ -101,6 +104,7 @@ async fn main() -> Result<()> {
             funding_apr_pct,
             maintenance_pct,
             trade_from,
+            daily_csv,
         } => {
             let trade_from_ms = match trade_from {
                 Some(text) => Some(backtest::parse_time(&text).ok_or_else(|| {
@@ -119,7 +123,12 @@ async fn main() -> Result<()> {
                 maintenance_pct,
                 trade_from_ms,
             };
-            backtest::print(&backtest::run(&config, &bars, &options));
+            let report = backtest::run(&config, &bars, &options);
+            backtest::print(&report);
+            if let Some(path) = daily_csv {
+                std::fs::write(&path, backtest::daily_csv(&report))?;
+                println!("  daily rows written to {}", path.display());
+            }
             Ok(())
         }
     }

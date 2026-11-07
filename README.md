@@ -86,6 +86,7 @@ been liquidated**. Options:
 | `--maintenance-pct` | 2.5 | When liquidation happens: SOL 2.5, ETH 2, BTC 1.25. |
 | `--funding-apr-pct` | 11 | Funding longs pay, % a year (an estimate). |
 | `--trade-from` | (start) | Only trade from this UTC time, e.g. `2026-11-07T09:22`. Earlier prices just warm up the EMA and trend filter. Handy to replay a day: "what would the bot have done since this morning?" |
+| `--daily-csv` | (off) | Also write how each day ended (price, account value, position) to a CSV file, for a spreadsheet or chart. |
 
 Fills are counted strictly: a resting order fills only once the price
 trades *through* it (a real order queues behind others at its price, so a

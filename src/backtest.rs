@@ -78,6 +78,17 @@ pub struct Report {
     pub open_position: Decimal,
     /// Return each calendar year (%).
     pub years: Vec<(i64, Decimal)>,
+    /// How each day ended, for charts.
+    pub daily: Vec<Day>,
+}
+
+/// The end of one day: the coin's price, the account, and what we held.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Day {
+    pub day: String,
+    pub close: Decimal,
+    pub equity: Decimal,
+    pub position: Decimal,
 }
 
 /// Read every CSV file given (or inside a directory given), oldest first.
@@ -267,6 +278,7 @@ pub fn run(config: &Config, bars: &[Bar], options: &Options) -> Report {
         if position > Decimal::ZERO && equity_low <= maintenance * position * bar.low {
             report.liquidated = Some(day_string(bar.time_ms));
             report.end_equity = Decimal::ZERO;
+            record_day(&mut report.daily, bar, Decimal::ZERO, Decimal::ZERO);
             worst = Decimal::NEGATIVE_ONE;
             break;
         }
@@ -282,6 +294,7 @@ pub fn run(config: &Config, bars: &[Bar], options: &Options) -> Report {
         }
         report.end_equity = equity;
         report.minutes += 1;
+        record_day(&mut report.daily, bar, equity, position);
     }
     if let Some((y, started)) = year {
         report.years.push((y, percent(report.end_equity, started)));
@@ -299,6 +312,35 @@ pub fn run(config: &Config, bars: &[Bar], options: &Options) -> Report {
     report.funding = funding;
     report.open_position = sim.bot.position();
     report
+}
+
+/// Keep the last minute of each day: start a new row on a new day, else update it.
+fn record_day(daily: &mut Vec<Day>, bar: &Bar, equity: Decimal, position: Decimal) {
+    let row = Day {
+        day: day_string(bar.time_ms),
+        close: bar.close,
+        equity,
+        position,
+    };
+    match daily.last_mut() {
+        Some(last) if last.day == row.day => *last = row,
+        _ => daily.push(row),
+    }
+}
+
+/// The daily rows as CSV, for a spreadsheet or a chart.
+pub fn daily_csv(report: &Report) -> String {
+    let mut csv = String::from("date,close,equity,position\n");
+    for d in &report.daily {
+        csv += &format!(
+            "{},{},{},{}\n",
+            d.day,
+            d.close,
+            d.equity.round_dp(4),
+            d.position
+        );
+    }
+    csv
 }
 
 fn push_capped(closes: &mut Vec<Decimal>, close: Decimal, cap: usize) {
@@ -519,6 +561,24 @@ mod tests {
         assert_eq!((report.cycles, report.wins), (1, 1), "{report:?}");
         assert!(report.end_equity > d("1000"));
         assert!(report.liquidated.is_none());
+    }
+
+    #[test]
+    fn keeps_one_row_per_day() {
+        let report = run(&config(), &bars(&[("99", 60), ("100", 60)]), &options());
+        let days: Vec<&str> = report.daily.iter().map(|d| d.day.as_str()).collect();
+        assert_eq!(days, vec!["1970-01-01", "1970-01-02"]);
+        let last = report.daily.last().unwrap();
+        assert_eq!(
+            last.equity, report.end_equity,
+            "the day closes with the run"
+        );
+        assert_eq!(last.close, d("100"));
+        assert_eq!(
+            report.daily[0].equity,
+            d("1000"),
+            "nothing happened on day one"
+        );
     }
 
     #[test]
